@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>오목 하게</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --board-bg: #d4922f;
+    --board-line: #8b5e1a;
+    --gold: #f0c040;
+    --gold-dim: #c9952a;
+    --accent: #e84040;
+    --bg: #1c0f05;
+    --panel: #2a1508;
+    --panel2: #3a1e0c;
+    --text: #f0dbb0;
+    --text-dim: #a07840;
+    --text-muted: #6b4a20;
+    --modal-bg: rgba(15,7,2,0.93);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%; height: 100dvh;
+    overflow: hidden;
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  /* ── FULL-SCREEN LAYOUT ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    flex-shrink: 0;
+    padding: 10px 16px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(180deg, #0e0602 0%, transparent 100%);
+  }
+  .logo { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; color: var(--gold); text-shadow: 0 0 16px rgba(240,192,64,0.4); }
+  .logo span { color: var(--text); font-weight: 300; }
+  .header-btns { display: flex; gap: 7px; }
+  .icon-btn {
+    width: 34px; height: 34px; border-radius: 9px;
+    border: 1px solid var(--text-muted); background: var(--panel);
+    color: var(--text-dim); font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .icon-btn:active { transform: scale(0.9); }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    flex-shrink: 0;
+    padding: 5px 14px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .player-card {
+    flex: 1; background: var(--panel); border-radius: 10px;
+    padding: 6px 9px; display: flex; align-items: center; gap: 7px;
+    border: 1.5px solid transparent; transition: all 0.2s; min-width: 0;
+  }
+  .player-card.active { border-color: var(--gold); background: var(--panel2); box-shadow: 0 0 12px rgba(240,192,64,0.18); }
+  .player-card.active.black-active { border-color: #888; box-shadow: 0 0 12px rgba(180,180,180,0.15); }
+  .stone-icon { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
+  .stone-icon.black { background: radial-gradient(circle at 38% 35%, #777, #111 65%); box-shadow: 0 2px 5px rgba(0,0,0,0.8); }
+  .stone-icon.white { background: radial-gradient(circle at 38% 35%, #fff, #ccc 70%); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
+  .player-info { min-width: 0; flex: 1; }
+  .player-name { font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.4px; }
+  .player-label { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .turn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); animation: pulse 1s infinite; flex-shrink: 0; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.6)} }
+  .vs-badge { background: var(--panel2); border-radius: 7px; padding: 3px 7px; font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1px; flex-shrink: 0; }
+
+  /* ── MOVE COUNTER ── */
+  .move-counter {
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 1px 0 3px;
+    letter-spacing: 0.3px;
+    min-height: 18px;
+  }
+
+  /* ── BOARD ── */
+  .board-wrapper {
+    flex-shrink: 0;
+    padding: 0 10px;
+    display: flex;
+    justify-content: center;
+  }
+  #board-container {
+    width: 100%;
+    aspect-ratio: 1;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 3px 24px rgba(0,0,0,0.7), inset 0 0 0 2px #6b3a1f;
+    touch-action: none; cursor: pointer;
+  }
+  #board-bg {
+    position: absolute; inset: 0;
+    background: var(--board-bg);
+  }
+  #board-bg::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(168deg, transparent 0px, transparent 16px, rgba(80,40,5,0.06) 16px, rgba(80,40,5,0.06) 17px);
+    pointer-events: none;
+  }
+  #board-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  /* ── THINKING BAR ── */
+  .thinking-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--panel); overflow: hidden; opacity: 0; transition: opacity 0.2s; }
+  .thinking-bar.active { opacity: 1; }
+  .thinking-fill { height: 100%; width: 35%; background: linear-gradient(90deg, transparent, var(--gold), transparent); animation: thinking 1s infinite; }
+  @keyframes thinking { 0%{transform:translateX(-200%)} 100%{transform:translateX(400%)} }
+
+  /* ── INFO ROW ── */
+  .info-row {
+    flex-shrink: 0;
+    display: flex; gap: 6px;
+    padding: 5px 14px 4px;
+  }
+  .info-chip { flex: 1; background: var(--panel); border-radius: 9px; padding: 5px 9px; }
+  .info-chip-label { font-size: 9px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.7px; }
+  .info-chip-value { font-size: 13px; font-weight: 700; color: var(--gold); }
+
+  /* ── CONTROLS ── */
+  .controls {
+    flex-shrink: 0;
+    display: flex; gap: 7px;
+    padding: 4px 14px 10px;
+  }
+  .btn { flex: 1; padding: 11px 8px; border-radius: 11px; border: none; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary { background: linear-gradient(135deg, #c87020, #f0a030); color: #1a0a00; box-shadow: 0 3px 10px rgba(200,112,32,0.4); }
+  .btn-secondary { background: var(--panel2); color: var(--text-dim); border: 1px solid var(--text-muted); flex: 0 0 auto; padding: 11px 16px; }
+
+  /* ── MODALS ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: var(--modal-bg);
+    z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.22s;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    width: 100%; max-width: 480px;
+    background: #1e0f06; border-radius: 20px 20px 0 0;
+    padding: 8px 18px 34px;
+    border-top: 1.5px solid var(--text-muted);
+    transform: translateY(50px); transition: transform 0.28s cubic-bezier(.25,.8,.25,1);
+    max-height: 92dvh; overflow-y: auto;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-handle { width: 38px; height: 4px; background: var(--text-muted); border-radius: 2px; margin: 8px auto 16px; }
+  .modal-title { font-size: 19px; font-weight: 900; color: var(--gold); margin-bottom: 3px; }
+  .modal-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 18px; }
+  .modal-section { margin-bottom: 16px; }
+  .modal-section-label { font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 7px; }
+
+  /* color choice */
+  .color-choice { display: flex; gap: 9px; }
+  .color-btn { flex: 1; padding: 13px 10px; border-radius: 13px; border: 2px solid var(--text-muted); background: var(--panel); cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .color-btn.selected { border-color: var(--gold); background: var(--panel2); }
+  .color-btn:active { transform: scale(0.96); }
+  .big-stone { width: 38px; height: 38px; border-radius: 50%; }
+  .big-stone.black { background: radial-gradient(circle at 38% 35%, #888, #111 65%); box-shadow: 0 4px 10px rgba(0,0,0,0.8); }
+  .big-stone.white { background: radial-gradient(circle at 38% 35%, #fff, #ccc 70%); box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+  .color-btn span { font-size: 12px; font-weight: 700; color: var(--text); }
+  .color-note { font-size: 10px; color: var(--text-muted); }
+
+  /* diff tabs (in modal) */
+  .diff-tabs { display: flex; gap: 6px; }
+  .diff-tab { flex: 1; padding: 10px 4px; border-radius: 10px; border: 1.5px solid var(--text-muted); background: var(--panel); color: var(--text-dim); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; text-align: center; }
+  .diff-tab.active { background: var(--panel2); border-color: var(--gold); color: var(--gold); }
+  .diff-tab:active { transform: scale(0.95); }
+
+  /* rank card in modal */
+  .rank-card { background: linear-gradient(135deg, var(--panel), var(--panel2)); border-radius: 13px; padding: 13px 14px; border: 1px solid var(--text-muted); display: flex; align-items: center; gap: 13px; }
+  .rank-emblem { width: 52px; height: 52px; border-radius: 11px; background: linear-gradient(135deg, #3a2010, #1a0c05); border: 2px solid var(--gold-dim); display: flex; align-items: center; justify-content: center; flex-direction: column; flex-shrink: 0; }
+  .rank-kyu { font-size: 20px; font-weight: 900; color: var(--gold); line-height: 1; }
+  .rank-unit { font-size: 9px; color: var(--gold-dim); font-weight: 700; margin-top: 1px; }
+  .rank-info { flex: 1; min-width: 0; }
+  .rank-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .rank-desc { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+  .elo-bar { margin-top: 6px; height: 4px; background: var(--panel); border-radius: 2px; overflow: hidden; }
+  .elo-fill { height: 100%; background: linear-gradient(90deg, var(--gold-dim), var(--gold)); border-radius: 2px; transition: width 0.5s; }
+  .elo-txt { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+
+  /* modal start btn */
+  .modal-start-btn { width: 100%; padding: 14px; border-radius: 13px; border: none; background: linear-gradient(135deg, #c87020, #f0a030); color: #1a0a00; font-family: inherit; font-size: 16px; font-weight: 900; cursor: pointer; box-shadow: 0 4px 16px rgba(200,112,32,0.45); transition: all 0.15s; margin-top: 4px; }
+  .modal-start-btn:active { transform: scale(0.97); }
+
+  /* result modal */
+  .result-icon { font-size: 48px; text-align: center; margin-bottom: 6px; }
+  .result-title { font-size: 24px; font-weight: 900; text-align: center; margin-bottom: 4px; }
+  .result-sub { font-size: 13px; color: var(--text-dim); text-align: center; margin-bottom: 16px; }
+  .result-stats { display: flex; gap: 7px; margin-bottom: 14px; }
+  .stat-box { flex: 1; background: var(--panel); border-radius: 11px; padding: 11px 7px; text-align: center; }
+  .stat-box-value { font-size: 20px; font-weight: 900; color: var(--gold); }
+  .stat-box-label { font-size: 9px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.4px; margin-top: 2px; }
+  .rank-change { background: var(--panel2); border-radius: 11px; padding: 11px 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--text-muted); }
+  .rank-change-icon { font-size: 22px; }
+  .rank-change-text { flex: 1; font-size: 13px; font-weight: 700; color: var(--text); }
+  .rank-change-delta { font-size: 14px; font-weight: 900; }
+  .delta-up { color: #4dcc88; }
+  .delta-down { color: var(--accent); }
+  .result-btns { display: flex; gap: 7px; }
+  .result-btn { flex: 1; padding: 13px; border-radius: 11px; border: none; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+  .result-btn:active { transform: scale(0.96); }
+  .result-btn-main { background: linear-gradient(135deg, #c87020, #f0a030); color: #1a0a00; }
+  .result-btn-sub { background: var(--panel2); color: var(--text-dim); border: 1px solid var(--text-muted); }
+
+  /* feedback */
+  .feedback-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+  .feedback-item { background: var(--panel); border-radius: 9px; padding: 9px 11px; font-size: 12px; color: var(--text); border-left: 3px solid var(--gold-dim); line-height: 1.5; }
+  .feedback-item.warn { border-color: var(--accent); }
+  .feedback-item.good { border-color: #4dcc88; }
+
+  /* stats modal */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 16px; }
+  .stats-cell { background: var(--panel); border-radius: 11px; padding: 12px 11px; }
+  .stats-cell-v { font-size: 24px; font-weight: 900; color: var(--gold); }
+  .stats-cell-l { font-size: 10px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.4px; }
+  .rank-history { display: flex; flex-direction: column; gap: 5px; }
+  .rank-row { display: flex; align-items: center; justify-content: space-between; background: var(--panel); border-radius: 9px; padding: 9px 11px; }
+  .rank-row-label { font-size: 12px; color: var(--text-dim); }
+  .rank-row-val { font-size: 13px; font-weight: 700; color: var(--gold); }
+
+  /* info modal */
+  .info-item { background: var(--panel); border-radius: 9px; padding: 9px 11px; font-size: 12px; color: var(--text); border-left: 3px solid var(--gold-dim); line-height: 1.5; margin-bottom: 5px; }
+  .info-item.warn { border-color: var(--accent); }
+  .info-item.good { border-color: #4dcc88; }
+
+  /* ripple / forbidden */
+  .ripple { position: absolute; border-radius: 50%; background: rgba(240,192,64,0.28); transform: scale(0); animation: ripple-anim 0.55s ease-out forwards; pointer-events: none; }
+  @keyframes ripple-anim { to { transform: scale(4); opacity: 0; } }
+  .forbidden-flash { position: absolute; border-radius: 50%; background: rgba(232,64,64,0.5); transform: scale(0); animation: forbidden-anim 0.4s ease-out forwards; pointer-events: none; }
+  @keyframes forbidden-anim { 50%{transform:scale(1.5);opacity:1} 100%{transform:scale(2.5);opacity:0} }
+
+  /* ── MULTIPLAYER ── */
+  @keyframes mp-spin { to { transform: rotate(360deg); } }
+  .mp-spinner { width: 26px; height: 26px; border: 3px solid var(--text-muted); border-top-color: var(--gold); border-radius: 50%; animation: mp-spin 0.8s linear infinite; margin: 14px auto 0; }
+  .mp-code-input { width: 100%; padding: 14px; font-size: 26px; letter-spacing: 10px; text-align: center; border-radius: 12px; border: 1.5px solid var(--text-muted); background: var(--panel); color: var(--text); font-family: inherit; margin-bottom: 16px; }
+  .mp-code-display { font-size: 44px; font-weight: 900; letter-spacing: 8px; color: var(--gold); text-align: center; }
+  .mp-btn-outline { background: linear-gradient(135deg,var(--panel2),var(--panel)); color: var(--text); box-shadow: none; border: 1.5px solid var(--text-muted); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="logo">오목 <span>하게</span></div>
+    <div class="header-btns">
+      <button class="icon-btn" id="btn-stats">📊</button>
+      <button class="icon-btn" id="btn-info">📖</button>
+    </div>
+  </header>
+
+  <div class="status-bar">
+    <div class="player-card" id="card-black">
+      <div class="stone-icon black"></div>
+      <div class="player-info">
+        <div class="player-name">흑 (선수)</div>
+        <div class="player-label" id="black-label">나</div>
+      </div>
+      <div class="turn-dot" id="dot-black" style="display:none"></div>
+    </div>
+    <div class="vs-badge">VS</div>
+    <div class="player-card" id="card-white">
+      <div class="stone-icon white"></div>
+      <div class="player-info">
+        <div class="player-name">백 (후수)</div>
+        <div class="player-label" id="white-label">AI</div>
+      </div>
+      <div class="turn-dot" id="dot-white" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="move-counter" id="move-counter">새 게임을 시작하세요</div>
+
+  <div class="board-wrapper">
+    <div id="board-container">
+      <div id="board-bg"></div>
+      <canvas id="board-canvas"></canvas>
+      <div class="thinking-bar" id="thinking-bar"><div class="thinking-fill"></div></div>
+    </div>
+  </div>
+
+  <div class="info-row">
+    <div class="info-chip">
+      <div class="info-chip-label">난이도</div>
+      <div class="info-chip-value">최고</div>
+    </div>
+    <div class="info-chip">
+      <div class="info-chip-label">룰</div>
+      <div class="info-chip-value">렌주룰</div>
+    </div>
+    <div class="info-chip">
+      <div class="info-chip-label">전적</div>
+      <div class="info-chip-value" id="record-display">0승 0패</div>
+    </div>
+    <div class="info-chip" id="mp-chip" style="cursor:pointer" onclick="openModal('modal-mp')">
+      <div class="info-chip-label">대전</div>
+      <div class="info-chip-value">🌐 매칭</div>
+    </div>
+    <div class="info-chip" id="rank-chip" style="cursor:pointer" onclick="openModal('modal-stats')">
+      <div class="info-chip-label">기력</div>
+      <div class="info-chip-value" id="rank-chip-val">15급</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="btn-new">새 게임</button>
+    <button class="btn btn-secondary" id="btn-undo">↩ 무르기</button>
+  </div>
+
+</div>
+
+<!-- ── NEW GAME MODAL ── -->
+<div class="modal-overlay" id="modal-new">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">새 게임 🎮</div>
+    <div class="modal-sub">색상을 선택하고 최고 AI에 도전하세요</div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">내 돌 색상</div>
+      <div class="color-choice">
+        <button class="color-btn selected" id="choose-black" onclick="chooseColor('black')">
+          <div class="big-stone black"></div>
+          <span>흑 (선수)</span>
+          <div class="color-note">먼저 둡니다</div>
+        </button>
+        <button class="color-btn" id="choose-white" onclick="chooseColor('white')">
+          <div class="big-stone white"></div>
+          <span>백 (후수)</span>
+          <div class="color-note">나중에 둡니다</div>
+        </button>
+      </div>
+    </div>
+
+    <button class="modal-start-btn" onclick="startGame()">게임 시작</button>
+  </div>
+</div>
+
+<!-- ── RESULT MODAL ── -->
+<div class="modal-overlay" id="modal-result">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="result-icon" id="result-icon">🎉</div>
+    <div class="result-title" id="result-title">승리!</div>
+    <div class="result-sub" id="result-sub">훌륭했습니다</div>
+    <div class="result-stats">
+      <div class="stat-box"><div class="stat-box-value" id="r-moves">0</div><div class="stat-box-label">수</div></div>
+      <div class="stat-box"><div class="stat-box-value" id="r-time">0</div><div class="stat-box-label">초</div></div>
+      <div class="stat-box"><div class="stat-box-value" id="r-quality">-</div><div class="stat-box-label">플레이 질</div></div>
+    </div>
+    <div class="rank-change" id="rank-change-box">
+      <div class="rank-change-icon">⚡</div>
+      <div class="rank-change-text" id="rank-change-text">ELO 변화</div>
+      <div class="rank-change-delta" id="rank-change-delta">+0</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">이번 게임 피드백</div>
+      <div class="feedback-list" id="feedback-list"></div>
+    </div>
+    <div class="result-btns">
+      <button class="result-btn result-btn-main" onclick="rematch()">다시 하기</button>
+      <button class="result-btn result-btn-sub" onclick="closeModal('modal-result')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── STATS MODAL ── -->
+<div class="modal-overlay" id="modal-stats">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">내 기록 📊</div>
+    <div class="modal-sub">누적 성적과 기력</div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">현재 기력</div>
+      <div class="rank-card">
+        <div class="rank-emblem">
+          <div class="rank-kyu" id="rank-kyu">15</div>
+          <div class="rank-unit" id="rank-unit">급</div>
+        </div>
+        <div class="rank-info">
+          <div class="rank-title" id="rank-title">입문자</div>
+          <div class="rank-desc" id="rank-desc">첫 게임을 시작해보세요!</div>
+          <div class="elo-bar"><div class="elo-fill" id="elo-fill" style="width:5%"></div></div>
+          <div class="elo-txt" id="elo-txt">ELO: 800</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stats-cell"><div class="stats-cell-v" id="s-total">0</div><div class="stats-cell-l">총 게임</div></div>
+      <div class="stats-cell"><div class="stats-cell-v" id="s-wins">0</div><div class="stats-cell-l">승리</div></div>
+      <div class="stats-cell"><div class="stats-cell-v" id="s-wr">0%</div><div class="stats-cell-l">승률</div></div>
+      <div class="stats-cell"><div class="stats-cell-v" id="s-elo">800</div><div class="stats-cell-l">ELO</div></div>
+    </div>
+
+    <div style="height:14px"></div>
+    <button class="modal-start-btn" onclick="closeModal('modal-stats')">닫기</button>
+    <button id="btn-reset-stats" style="width:100%;margin-top:9px;padding:12px;border-radius:11px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s;">🗑 전적 &amp; 기력 초기화</button>
+  </div>
+</div>
+
+<!-- ── CONFIRM (초기화 확인) MODAL ── -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="padding-bottom:28px">
+    <div class="modal-handle"></div>
+    <div style="font-size:32px;text-align:center;margin-bottom:10px">🗑</div>
+    <div class="modal-title" style="text-align:center">전적 초기화</div>
+    <div class="modal-sub" style="text-align:center;margin-bottom:22px">승패 기록과 기력(ELO)이 모두 삭제됩니다.<br>이 작업은 되돌릴 수 없습니다.</div>
+    <div style="display:flex;gap:9px">
+      <button onclick="closeModal('modal-confirm')" style="flex:1;padding:13px;border-radius:11px;border:1.5px solid var(--text-muted);background:var(--panel2);color:var(--text-dim);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s">취소</button>
+      <button id="btn-confirm-reset" style="flex:1;padding:13px;border-radius:11px;border:none;background:var(--accent);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s">초기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── INFO MODAL ── -->
+<div class="modal-overlay" id="modal-info">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">렌주룰 📖</div>
+    <div class="modal-sub">공식 오목 규칙 안내</div>
+    <div class="modal-section">
+      <div class="modal-section-label">기본 규칙</div>
+      <div class="info-item good">5목: 돌 5개가 가로·세로·대각선으로 연속되면 승리</div>
+      <div class="info-item">흑(선수)과 백(후수)이 번갈아 한 수씩 둡니다</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">흑(선수) 금수 🚫</div>
+      <div class="info-item warn">쌍삼(3-3): 열린 3을 동시에 2개 만드는 수 금지</div>
+      <div class="info-item warn">쌍사(4-4): 4를 동시에 2개 만드는 수 금지</div>
+      <div class="info-item warn">장목: 6개 이상 연속은 승리 불인정</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">기력 체계</div>
+      <div class="info-item">15~10급: 보통 AI 단계</div>
+      <div class="info-item">9~5급: 어려움 AI와 대등</div>
+      <div class="info-item">4~1급: 어려움 AI 꾸준히 이김</div>
+      <div class="info-item good">1단 이상: 최고 AI에게 승리</div>
+    </div>
+    <button class="modal-start-btn" onclick="closeModal('modal-info')">확인</button>
+  </div>
+</div>
+
+<!-- ── MULTIPLAYER ENTRY MODAL ── -->
+<div class="modal-overlay" id="modal-mp">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">대전 모드 🌐</div>
+    <div class="modal-sub">친구와 실시간으로 오목 대결을 펼쳐보세요</div>
+    <div class="modal-section">
+      <button class="modal-start-btn" id="btn-mp-create">🏠 방 만들기</button>
+    </div>
+    <div class="modal-section">
+      <button class="modal-start-btn mp-btn-outline" id="btn-mp-join-open">🔑 방 번호로 입장하기</button>
+    </div>
+    <div class="color-note" style="text-align:center">흑돌/백돌은 입장 시 50:50 확률로 랜덤 배정됩니다</div>
+  </div>
+</div>
+
+<!-- ── MULTIPLAYER WAIT MODAL (방 만들기 결과) ── -->
+<div class="modal-overlay" id="modal-mp-wait">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">방을 만들었어요 🏠</div>
+    <div class="modal-sub">친구에게 아래 방 번호를 알려주세요</div>
+    <div style="margin:10px 0 20px">
+      <div class="mp-code-display" id="mp-wait-code">----</div>
+      <div class="mp-spinner"></div>
+      <div style="font-size:12px;color:var(--text-dim);text-align:center;margin-top:10px">상대방을 기다리는 중...</div>
+    </div>
+    <button class="result-btn result-btn-sub" id="btn-mp-cancel-wait" style="width:100%">취소</button>
+  </div>
+</div>
+
+<!-- ── MULTIPLAYER JOIN MODAL ── -->
+<div class="modal-overlay" id="modal-mp-join">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">방 번호 입력 🔑</div>
+    <div class="modal-sub">친구에게 받은 4자리 방 번호를 입력하세요</div>
+    <input id="mp-code-input" class="mp-code-input" type="tel" inputmode="numeric" maxlength="4" placeholder="0000">
+    <button class="modal-start-btn" id="btn-mp-join-submit">입장하기</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script>
+// ═══════════════════════════════════════
+//  SOUND (Web Audio API)
+// ═══════════════════════════════════════
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// 브라우저 자동재생 정책 해제: 첫 사용자 제스처(터치/클릭)에서 AudioContext를 미리 생성·resume
+function unlockAudio() {
+  const ac = getAudioCtx();
+  // 무음 버퍼 재생으로 정책 해제
+  const buf = ac.createBuffer(1, 1, ac.sampleRate);
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  src.connect(ac.destination);
+  src.start(0);
+  document.removeEventListener('touchstart', unlockAudio, true);
+  document.removeEventListener('touchend',   unlockAudio, true);
+  document.removeEventListener('click',      unlockAudio, true);
+}
+document.addEventListener('touchstart', unlockAudio, true);
+document.addEventListener('touchend',   unlockAudio, true);
+document.addEventListener('click',      unlockAudio, true);
+
+// 돌 놓는 소리 — 리버시에서 이식한 방식 (노이즈 버스트 + 저음 바디)
+function playStoneSound(isPlayer) {
+  try {
+    const ac = getAudioCtx();
+    const t = ac.currentTime;
+
+    // 짧고 둔탁한 클릭 — 나무 위에 돌 놓는 느낌
+    const dur = 0.08;
+    const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const s = i / ac.sampleRate;
+      data[i] = Math.exp(-s * 80) * (Math.random() * 2 - 1) * 0.55
+               + Math.exp(-s * 30) * Math.sin(2 * Math.PI * (isPlayer ? 200 : 160) * s) * 0.4;
+    }
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(1.0, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+    src.connect(gain); gain.connect(ac.destination);
+    src.start(t);
+  } catch(e) {}
+}
+
+// 금수 소리 — 낮고 둔한 버저
+function playForbiddenSound() {
+  const ac = getAudioCtx();
+  const t = ac.currentTime;
+  const osc = ac.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(80, t + 0.18);
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.25, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  osc.connect(gain); gain.connect(ac.destination);
+  osc.start(t); osc.stop(t + 0.22);
+}
+
+// 승리 소리 — 밝은 3화음 상승
+function playWinSound() {
+  const ac = getAudioCtx();
+  const freqs = [523, 659, 784, 1047]; // C5 E5 G5 C6
+  freqs.forEach((freq, i) => {
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const gain = ac.createGain();
+    const t = ac.currentTime + i * 0.1;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.22, t + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.start(t); osc.stop(t + 0.55);
+  });
+}
+
+// 패배 소리 — 낮게 하강
+function playLoseSound() {
+  const ac = getAudioCtx();
+  const freqs = [392, 330, 262]; // G4 E4 C4
+  freqs.forEach((freq, i) => {
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const gain = ac.createGain();
+    const t = ac.currentTime + i * 0.15;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.18, t + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.start(t); osc.stop(t + 0.6);
+  });
+}
+
+// ═══════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════
+const SIZE = 15;
+const EMPTY = 0, BLACK = 1, WHITE = 2;
+// 깊이: 보통2, 어려움3, 최고4 — 후보 제한으로 최고도 빠름
+const DIFF_DEPTH = { 1: 2, 2: 3, 3: 4 };
+const DIFF_NAMES = { 1: '보통', 2: '어려움', 3: '최고' };
+const DIFF_ELO   = { 1: 1000, 2: 1300, 3: 1600 };
+
+// ═══════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════
+let board = [], gameHistory = [], gameOver = false;
+let currentTurn = BLACK, playerColor = BLACK, aiColor = WHITE;
+let difficulty = 3, gameStarted = false;
+let startTime = 0, moveCount = 0, playerMistakes = 0;
+let selectedColor = 'black', thinking = false;
+let aiTimeoutId = null;
+
+let stats = JSON.parse(localStorage.getItem('omok_stats2') || JSON.stringify({
+  elo: 800, wins: 0, losses: 0,
+  diffStats: { 1:{w:0,l:0}, 2:{w:0,l:0}, 3:{w:0,l:0} }
+}));
+
+let modalStack = [];
+
+// ═══════════════════════════════════════
+//  FIREBASE — 대전(멀티플레이) 모드
+// ═══════════════════════════════════════
+// 사용 방법:
+// 1) https://console.firebase.google.com 에서 새 프로젝트를 만듭니다.
+// 2) 왼쪽 메뉴 "Realtime Database" → "데이터베이스 만들기" → "테스트 모드"로 시작합니다.
+// 3) 프로젝트 설정(⚙) → "내 앱"에서 웹 앱을 추가하고, 아래 firebaseConfig 값을 그대로 붙여넣습니다.
+// 4) Realtime Database의 "규칙" 탭에 아래 규칙을 붙여넣고 게시합니다:
+//    { "rules": { "rooms": { "$room": { ".read": true, ".write": true } } } }
+//    (방 번호를 아는 친구끼리만 쓰는 캐주얼 대전용 설정입니다. 공개 서비스에는 적합하지 않습니다.)
+const firebaseConfig = {
+  apiKey: "AIzaSyBPJ-9JTXR57r5AtZGucqR000veilceBAI",
+  authDomain: "omok-1e705.firebaseapp.com",
+  databaseURL: "https://omok-1e705-default-rtdb.firebaseio.com",
+  projectId: "omok-1e705"
+};
+let db = null;
+try {
+  if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('여기에')) {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+  }
+} catch (e) { console.error('Firebase 초기화 실패:', e); }
+
+function dbReady() {
+  if (!db) { alert('대전 모드를 쓰려면 먼저 Firebase 설정이 필요해요.\n코드 상단의 firebaseConfig 값을 채워주세요.'); return false; }
+  return true;
+}
+
+// 이 브라우저(기기)를 구분하기 위한 고유 ID — localStorage에 저장해 재사용
+let mpMyId = localStorage.getItem('omok_mp_id');
+if (!mpMyId) {
+  mpMyId = 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  localStorage.setItem('omok_mp_id', mpMyId);
+}
+
+let mpEnabled = false;      // 지금 대전 중인지
+let mpRoomCode = null;
+let mpRoomRef = null;
+let mpMovesRef = null;
+let mpIsHost = false;
+
+// ═══════════════════════════════════════
+//  BOARD CANVAS
+// ═══════════════════════════════════════
+const container = document.getElementById('board-container');
+const canvas    = document.getElementById('board-canvas');
+const ctx       = canvas.getContext('2d');
+let cellSize, padX, boardW;
+
+function setupBoard() {
+  const cw = container.clientWidth;
+  canvas.width = cw; canvas.height = cw;
+  boardW = cw;
+  cellSize = cw / SIZE;
+  padX = cellSize / 2;
+  container.style.setProperty('--cell', cellSize + 'px');
+  container.style.setProperty('--pad', padX + 'px');
+  drawBoard();
+}
+
+function gx(c) { return padX + c * cellSize; }
+function gy(r) { return padX + r * cellSize; }
+
+function drawBoard() {
+  if (!canvas.width) return;
+  ctx.clearRect(0, 0, boardW, boardW);
+  // Grid lines — drawn directly on canvas so they always render crisply
+  // (a CSS background-gradient approach was unreliable on some mobile browsers)
+  ctx.save();
+  ctx.strokeStyle = '#8b5e1a';
+  ctx.lineWidth = 1;
+  const gStart = gx(0), gEnd = gx(SIZE - 1);
+  for (let i = 0; i < SIZE; i++) {
+    const x = Math.round(gx(i)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x, gStart); ctx.lineTo(x, gEnd); ctx.stroke();
+    const y = Math.round(gy(i)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(gStart, y); ctx.lineTo(gEnd, y); ctx.stroke();
+  }
+  ctx.restore();
+  // Star points
+  [[3,3],[3,11],[7,7],[11,3],[11,11]].forEach(([r,c]) => {
+    ctx.fillStyle = '#7a4a10';
+    ctx.beginPath(); ctx.arc(gx(c), gy(r), cellSize*0.09, 0, Math.PI*2); ctx.fill();
+  });
+  // Stones
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (board[r] && board[r][c]) drawStone(r, c, board[r][c]);
+  // Last move marker — 또렷하게
+  if (gameHistory.length) {
+    const last = gameHistory[gameHistory.length-1];
+    const mx = Math.round(gx(last.c)) + 0.5;
+    const my = Math.round(gy(last.r)) + 0.5;
+    const mr = Math.round(cellSize * 0.2);
+    ctx.save();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = last.color === BLACK ? '#ffe033' : '#3a2000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(mx, my, mr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawStone(r, c, color) {
+  const x = gx(c), y = gy(r), rad = cellSize * 0.44;
+  ctx.save();
+  let grad;
+  if (color === BLACK) {
+    grad = ctx.createRadialGradient(x-rad*.3, y-rad*.35, rad*.05, x, y, rad);
+    grad.addColorStop(0,'#888'); grad.addColorStop(.4,'#2a2a2a'); grad.addColorStop(1,'#0a0a0a');
+    ctx.shadowColor='rgba(0,0,0,.7)'; ctx.shadowBlur=8; ctx.shadowOffsetY=3;
+  } else {
+    grad = ctx.createRadialGradient(x-rad*.3, y-rad*.35, rad*.05, x, y, rad);
+    grad.addColorStop(0,'#fff'); grad.addColorStop(.5,'#e8e0d0'); grad.addColorStop(1,'#c0b8a8');
+    ctx.shadowColor='rgba(0,0,0,.45)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
+  }
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════
+//  GAME LOGIC
+// ═══════════════════════════════════════
+function placeStone(r, c, color) {
+  board[r][c] = color;
+  gameHistory.push({r, c, color});
+}
+function undoMove() {
+  if (!gameHistory.length) return;
+  const m = gameHistory.pop();
+  board[m.r][m.c] = EMPTY;
+}
+
+function countLine(bd, r, c, color, dr, dc) {
+  let n = 1, r2=r+dr, c2=c+dc;
+  while(r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===color){n++;r2+=dr;c2+=dc;}
+  r2=r-dr; c2=c-dc;
+  while(r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===color){n++;r2-=dr;c2-=dc;}
+  return n;
+}
+
+function checkWin(bd, color) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) {
+    if (bd[r][c]!==color) continue;
+    for (const [dr,dc] of dirs) {
+      // For black: must be exactly 5
+      const n = countLine(bd,r,c,color,dr,dc);
+      if (color===BLACK && n===5) return true;
+      if (color===WHITE && n>=5) return true;
+    }
+  }
+  return false;
+}
+
+// Overline check (장목: >=6 for black)
+function isOverline(bd,r,c) {
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr,dc] of dirs) if (countLine(bd,r,c,BLACK,dr,dc)>5) return true;
+  return false;
+}
+
+// Open-3 in one axis
+function isOpen3Axis(bd,r,c,color,dr,dc) {
+  // pattern: _XXX_ where total stones = 3, both ends empty
+  let stones=1, r2=r+dr, c2=c+dc, end1=false, end2=false;
+  while(r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===color){stones++;r2+=dr;c2+=dc;}
+  if(r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===EMPTY) end1=true;
+  r2=r-dr; c2=c-dc;
+  while(r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===color){stones++;r2-=dr;c2-=dc;}
+  if(r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===EMPTY) end2=true;
+  return stones===3 && end1 && end2;
+}
+
+function countDoubleOpen3(bd,r,c) {
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  let cnt=0;
+  for (const [dr,dc] of dirs) if (isOpen3Axis(bd,r,c,BLACK,dr,dc)) cnt++;
+  return cnt;
+}
+
+function countDouble4(bd,r,c) {
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  let cnt=0;
+  for (const [dr,dc] of dirs) {
+    const n=countLine(bd,r,c,BLACK,dr,dc);
+    if (n===4) cnt++;
+  }
+  return cnt;
+}
+
+function isForbidden(bd,r,c) {
+  // Only applies to BLACK
+  bd[r][c]=BLACK;
+  if (isOverline(bd,r,c)) { bd[r][c]=EMPTY; return 'overline'; }
+  // 5목이면 금수 아님
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr,dc] of dirs) { if (countLine(bd,r,c,BLACK,dr,dc)===5) { bd[r][c]=EMPTY; return null; } }
+  if (countDoubleOpen3(bd,r,c)>=2) { bd[r][c]=EMPTY; return 'double3'; }
+  if (countDouble4(bd,r,c)>=2) { bd[r][c]=EMPTY; return 'double4'; }
+  bd[r][c]=EMPTY;
+  return null;
+}
+
+// ═══════════════════════════════════════
+//  AI — fast minimax with candidate limit
+// ═══════════════════════════════════════
+const SC = { five:1e7, open4:8e4, half4:8e3, open3:3000, half3:300, open2:100 };
+let aiDeadline = 0;
+
+function evalColor(bd, color) {
+  let score=0;
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) {
+    if (bd[r][c]!==color) continue;
+    for (const [dr,dc] of dirs) {
+      const pr=r-dr, pc=c-dc;
+      if (pr>=0&&pr<SIZE&&pc>=0&&pc<SIZE&&bd[pr][pc]===color) continue;
+      let n=1, r2=r+dr, c2=c+dc;
+      while(r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===color){n++;r2+=dr;c2+=dc;}
+      const eR=r2>=0&&r2<SIZE&&c2>=0&&c2<SIZE&&bd[r2][c2]===EMPTY;
+      const eL=pr>=0&&pr<SIZE&&pc>=0&&pc<SIZE&&bd[pr][pc]===EMPTY;
+      if(n>=5) score+=SC.five;
+      else if(n===4) { if(eL&&eR) score+=SC.open4; else if(eL||eR) score+=SC.half4; }
+      else if(n===3) { if(eL&&eR) score+=SC.open3; else if(eL||eR) score+=SC.half3; }
+      else if(n===2) { if(eL&&eR) score+=SC.open2; else if(eL||eR) score+=SC.open2*0.3; }
+    }
+  }
+  return score;
+}
+
+function evaluate(bd,aiCol) {
+  const opp=aiCol===BLACK?WHITE:BLACK;
+  return evalColor(bd,aiCol)-evalColor(bd,opp)*1.1;
+}
+
+// 후보 제한: 상위 N개만 탐색
+function getCandidates(bd, limit) {
+  const visited=new Set(), cands=[];
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) {
+    if (bd[r][c]===EMPTY) continue;
+    for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
+      const nr=r+dr,nc=c+dc;
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||bd[nr][nc]!==EMPTY) continue;
+      const k=nr*SIZE+nc;
+      if(!visited.has(k)){visited.add(k);cands.push([nr,nc]);}
+    }
+  }
+  if(!cands.length) return [[7,7]];
+  if(!limit || cands.length<=limit) return cands;
+  // Quick-score each candidate to pick top N
+  const scored=cands.map(([r,c])=>{
+    let s=0;
+    bd[r][c]=WHITE; s+=evalColor(bd,WHITE)*2; bd[r][c]=EMPTY;
+    bd[r][c]=BLACK; s+=evalColor(bd,BLACK);   bd[r][c]=EMPTY;
+    return {r,c,s};
+  });
+  scored.sort((a,b)=>b.s-a.s);
+  return scored.slice(0,limit).map(({r,c})=>[r,c]);
+}
+
+function minimax(bd, depth, alpha, beta, maximizing, aiCol, plCol) {
+  if (Date.now()>aiDeadline) return evaluate(bd,aiCol);
+  if (checkWin(bd,aiCol))  return SC.five+(depth*1000);
+  if (checkWin(bd,plCol))  return -SC.five-(depth*1000);
+  if (depth===0)           return evaluate(bd,aiCol);
+
+  // 후보 제한: 깊이가 깊을수록 더 좁게
+  const limit = depth>=3 ? 8 : depth===2 ? 12 : 20;
+  const cands=getCandidates(bd,limit);
+
+  if (maximizing) {
+    let best=-Infinity;
+    for (const [r,c] of cands) {
+      if (aiCol===BLACK&&isForbidden(bd,r,c)) continue;
+      bd[r][c]=aiCol;
+      const v=minimax(bd,depth-1,alpha,beta,false,aiCol,plCol);
+      bd[r][c]=EMPTY;
+      if(v>best) best=v;
+      alpha=Math.max(alpha,best);
+      if(beta<=alpha) break;
+    }
+    return best===-Infinity ? 0 : best;
+  } else {
+    let best=Infinity;
+    for (const [r,c] of cands) {
+      if (plCol===BLACK&&isForbidden(bd,r,c)) continue;
+      bd[r][c]=plCol;
+      const v=minimax(bd,depth-1,alpha,beta,true,aiCol,plCol);
+      bd[r][c]=EMPTY;
+      if(v<best) best=v;
+      beta=Math.min(beta,best);
+      if(beta<=alpha) break;
+    }
+    return best===Infinity ? 0 : best;
+  }
+}
+
+function getBestMove(bd, aiCol, plCol, depth) {
+  const cands=getCandidates(bd, null);
+
+  // 즉시 이기는 수
+  for (const [r,c] of cands) {
+    if(aiCol===BLACK&&isForbidden(bd,r,c)) continue;
+    bd[r][c]=aiCol;
+    if(checkWin(bd,aiCol)){bd[r][c]=EMPTY;return[r,c];}
+    bd[r][c]=EMPTY;
+  }
+  // 플레이어 승리 막기
+  for (const [r,c] of cands) {
+    bd[r][c]=plCol;
+    if(checkWin(bd,plCol)){bd[r][c]=EMPTY;return[r,c];}
+    bd[r][c]=EMPTY;
+  }
+
+  const topCands=getCandidates(bd, depth>=4?10:16);
+  let best=-Infinity, bestMove=topCands[0]||[7,7];
+  for (const [r,c] of topCands) {
+    if(aiCol===BLACK&&isForbidden(bd,r,c)) continue;
+    bd[r][c]=aiCol;
+    const v=minimax(bd,depth-1,-Infinity,Infinity,false,aiCol,plCol);
+    bd[r][c]=EMPTY;
+    if(v>best){best=v;bestMove=[r,c];}
+    if(Date.now()>aiDeadline) break; // 시간 초과 시 즉시 반환
+  }
+  return bestMove;
+}
+
+// AI 타임아웃: 난이도별 제한 시간
+const AI_TIME = { 1:1500, 2:2500, 3:4000 };
+
+async function aiMove() {
+  if(gameOver||currentTurn!==aiColor) return;
+  thinking=true;
+  document.getElementById('thinking-bar').classList.add('active');
+  document.getElementById('move-counter').textContent='AI가 생각 중...';
+
+  await new Promise(res=>setTimeout(res,30));
+
+  const depth=DIFF_DEPTH[difficulty];
+  const bd=board.map(r=>[...r]);
+  aiDeadline=Date.now()+AI_TIME[difficulty];
+
+  let move;
+  const hlen=gameHistory.length;
+  if(hlen===0) {
+    move=[7,7];
+  } else if(hlen===1) {
+    const last=gameHistory[0];
+    const opts=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1],[-2,0],[0,-2],[0,2],[2,0]];
+    opts.sort(()=>Math.random()-.5);
+    move=null;
+    for(const[dr,dc]of opts){const nr=last.r+dr,nc=last.c+dc;if(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&bd[nr][nc]===EMPTY){move=[nr,nc];break;}}
+    if(!move) move=getBestMove(bd,aiColor,playerColor,depth);
+  } else {
+    move=getBestMove(bd,aiColor,playerColor,depth);
+  }
+
+  thinking=false;
+  document.getElementById('thinking-bar').classList.remove('active');
+
+  if(!move) move=[7,7]; // 안전장치
+  placeStone(move[0],move[1],aiColor);
+  moveCount++;
+  drawBoard();
+  rippleEffect(move[0],move[1]);
+  playStoneSound(false);
+
+  if(checkWin(board,aiColor)) { endGame(false); return; }
+  currentTurn=playerColor;
+  updateUI();
+  const s=currentTurn===BLACK?'흑':'백';
+  document.getElementById('move-counter').textContent=`${s}의 차례 — ${moveCount+1}수째`;
+}
+
+// ═══════════════════════════════════════
+//  PLAYER INPUT
+// ═══════════════════════════════════════
+function getCell(cx,cy) {
+  const rect=canvas.getBoundingClientRect();
+  const x=(cx-rect.left)*(canvas.width/rect.width);
+  const y=(cy-rect.top)*(canvas.height/rect.height);
+  return [Math.round((y-padX)/cellSize), Math.round((x-padX)/cellSize)];
+}
+
+canvas.addEventListener('click', async(e)=>{
+  if(!gameStarted||gameOver||thinking||currentTurn!==playerColor) return;
+  const[r,c]=getCell(e.clientX,e.clientY);
+  if(r<0||r>=SIZE||c<0||c>=SIZE||board[r][c]!==EMPTY) return;
+
+  if(playerColor===BLACK) {
+    const f=isForbidden(board,r,c);
+    if(f) {
+      forbiddenEffect(r,c);
+      playForbiddenSound();
+      const msgs={overline:'⛔ 장목 금수!',double3:'⛔ 쌍삼 금수!',double4:'⛔ 쌍사 금수!'};
+      document.getElementById('move-counter').textContent=msgs[f];
+      playerMistakes++;
+      return;
+    }
+  }
+
+  placeStone(r,c,playerColor);
+  moveCount++;
+  drawBoard();
+  rippleEffect(r,c);
+  playStoneSound(true);
+
+  if(mpEnabled && mpMovesRef) {
+    mpMovesRef.push({ r, c, color: playerColor===BLACK?'black':'white', by: mpMyId });
+  }
+
+  if(checkWin(board,playerColor)){
+    if(mpEnabled) mpEndGame(true); else endGame(true);
+    return;
+  }
+
+  if(mpEnabled) {
+    currentTurn = playerColor===BLACK?WHITE:BLACK;
+    updateUI();
+    const s=currentTurn===BLACK?'흑':'백';
+    document.getElementById('move-counter').textContent=`상대(${s})의 차례를 기다리는 중...`;
+    return;
+  }
+
+  currentTurn=aiColor;
+  updateUI();
+  document.getElementById('move-counter').textContent='AI가 생각 중...';
+  await new Promise(res=>setTimeout(res,80));
+  aiMove();
+});
+
+function rippleEffect(r,c) {
+  const rect=canvas.getBoundingClientRect();
+  const sc=rect.width/canvas.width;
+  const el=document.createElement('div');
+  el.className='ripple';
+  const sz=cellSize*sc*.7;
+  el.style.cssText=`width:${sz}px;height:${sz}px;left:${gx(c)*sc-sz/2}px;top:${gy(r)*sc-sz/2}px`;
+  container.appendChild(el);
+  setTimeout(()=>el.remove(),650);
+}
+function forbiddenEffect(r,c) {
+  const rect=canvas.getBoundingClientRect();
+  const sc=rect.width/canvas.width;
+  const el=document.createElement('div');
+  el.className='forbidden-flash';
+  const sz=cellSize*sc*.7;
+  el.style.cssText=`width:${sz}px;height:${sz}px;left:${gx(c)*sc-sz/2}px;top:${gy(r)*sc-sz/2}px`;
+  container.appendChild(el);
+  setTimeout(()=>el.remove(),500);
+}
+
+// ═══════════════════════════════════════
+//  MULTIPLAYER — 방 생성 / 입장 / 동기화
+// ═══════════════════════════════════════
+async function createRoom() {
+  let code, roomRef, exists = true, tries = 0;
+  do {
+    code = String(Math.floor(1000 + Math.random()*9000));
+    roomRef = db.ref('rooms/'+code);
+    const snap = await roomRef.once('value');
+    exists = snap.exists();
+    tries++;
+  } while (exists && tries < 10);
+
+  mpRoomCode = code; mpIsHost = true; mpRoomRef = roomRef;
+  await roomRef.set({
+    status: 'waiting',
+    hostId: mpMyId,
+    createdAt: firebase.database.ServerValue.TIMESTAMP
+  });
+  document.getElementById('mp-wait-code').textContent = code;
+  listenForGuest(roomRef);
+}
+
+function listenForGuest(roomRef) {
+  let matched = false;
+  roomRef.on('value', snap => {
+    const data = snap.val();
+    if (!data || matched) return;
+    if (data.status === 'playing' && data.colors && data.colors[mpMyId]) {
+      matched = true;
+      startMultiplayerGame(data.colors[mpMyId]);
+    }
+  });
+}
+
+async function joinRoom(code) {
+  const roomRef = db.ref('rooms/'+code);
+  const snap = await roomRef.once('value');
+  const data = snap.val();
+  if (!data || data.status !== 'waiting') throw new Error('invalid-room');
+
+  const hostColor = Math.random() < 0.5 ? 'black' : 'white'; // 50:50 랜덤 배정
+  const guestColor = hostColor === 'black' ? 'white' : 'black';
+  await roomRef.update({
+    guestId: mpMyId,
+    status: 'playing',
+    colors: { [data.hostId]: hostColor, [mpMyId]: guestColor }
+  });
+  mpRoomCode = code; mpIsHost = false; mpRoomRef = roomRef;
+  closeModal('modal-mp-join');
+  startMultiplayerGame(guestColor);
+}
+
+async function cancelRoom() {
+  if (mpRoomRef) {
+    mpRoomRef.off();
+    try { await mpRoomRef.remove(); } catch(e) {}
+    mpRoomRef = null;
+  }
+  mpRoomCode = null; mpIsHost = false;
+  closeModal('modal-mp-wait');
+}
+
+function setMPMode(active) {
+  mpEnabled = active;
+  document.getElementById('btn-undo').style.display = active ? 'none' : '';
+  document.getElementById('btn-new').textContent = active ? '🚪 대전 나가기' : '새 게임';
+}
+
+function startMultiplayerGame(colorStr) {
+  closeModal('modal-mp-wait');
+  closeModal('modal-mp-join');
+  closeModal('modal-mp');
+  setMPMode(true);
+  playerColor = colorStr === 'black' ? BLACK : WHITE;
+  aiColor = null;
+  document.getElementById('black-label').textContent = playerColor===BLACK ? '나' : '상대';
+  document.getElementById('white-label').textContent = playerColor===WHITE ? '나' : '상대';
+
+  mpMovesRef = mpRoomRef.child('moves');
+  mpMovesRef.on('child_added', snap => {
+    const mv = snap.val();
+    if (!mv || mv.by === mpMyId) return; // 내가 보낸 수는 이미 반영됨
+    applyRemoteMove(mv.r, mv.c, mv.color === 'black' ? BLACK : WHITE);
+  });
+
+  initGame();
+  const myTurnFirst = playerColor === BLACK;
+  document.getElementById('move-counter').textContent = myTurnFirst
+    ? '내 차례(흑) — 첫 수를 놓으세요'
+    : '상대(흑)의 차례를 기다리는 중...';
+}
+
+function applyRemoteMove(r, c, color) {
+  if (!gameStarted || gameOver) return;
+  placeStone(r, c, color);
+  moveCount++;
+  drawBoard();
+  rippleEffect(r, c);
+  playStoneSound(false);
+  if (checkWin(board, color)) { mpEndGame(false); return; }
+  currentTurn = playerColor;
+  updateUI();
+  const s = currentTurn===BLACK?'흑':'백';
+  document.getElementById('move-counter').textContent = `내 차례(${s}) — ${moveCount+1}수째`;
+}
+
+function mpEndGame(playerWon) {
+  gameOver = true;
+  if (mpRoomRef) mpRoomRef.update({ status: 'ended', winner: playerWon ? mpMyId : 'opponent' }).catch(()=>{});
+
+  document.getElementById('rank-change-box').style.display = 'none';
+  document.getElementById('result-icon').textContent = playerWon ? '🎉' : '😞';
+  document.getElementById('result-title').textContent = playerWon ? '승리!' : '패배...';
+  document.getElementById('result-sub').textContent = playerWon ? '대전 상대를 이겼습니다! 🏆' : '대전 상대에게 졌습니다.';
+  const elapsed = Math.round((Date.now()-startTime)/1000);
+  document.getElementById('r-moves').textContent = moveCount;
+  document.getElementById('r-time').textContent = elapsed;
+  document.getElementById('r-quality').textContent = '-';
+  document.getElementById('feedback-list').innerHTML =
+    `<div class="feedback-item ${playerWon?'good':''}">${playerWon?'🎉 실시간 대전에서 승리했습니다!':'😞 다음 대전에서는 이길 수 있어요!'}</div>`;
+
+  if (playerWon) playWinSound(); else playLoseSound();
+  setTimeout(()=>openModal('modal-result'),500);
+}
+
+function leaveRoom() {
+  if (mpMovesRef) { mpMovesRef.off(); mpMovesRef = null; }
+  if (mpRoomRef) {
+    mpRoomRef.off();
+    mpRoomRef.child('status').set('closed').catch(()=>{});
+    mpRoomRef = null;
+  }
+  mpRoomCode = null; mpIsHost = false;
+  setMPMode(false);
+  gameStarted = false; gameOver = true;
+  board = Array.from({length:SIZE},()=>Array(SIZE).fill(EMPTY));
+  gameHistory = [];
+  drawBoard();
+  document.getElementById('black-label').textContent = '나';
+  document.getElementById('white-label').textContent = 'AI';
+  document.getElementById('move-counter').textContent = '새 게임을 시작하세요';
+  updateUI();
+}
+
+document.getElementById('btn-mp-create').addEventListener('click', async () => {
+  if (!dbReady()) return;
+  closeModal('modal-mp');
+  document.getElementById('mp-wait-code').textContent = '----';
+  openModal('modal-mp-wait');
+  try { await createRoom(); }
+  catch(e) { alert('방 생성에 실패했습니다. 잠시 후 다시 시도해주세요.'); closeModal('modal-mp-wait'); }
+});
+
+document.getElementById('btn-mp-join-open').addEventListener('click', () => {
+  if (!dbReady()) return;
+  closeModal('modal-mp');
+  document.getElementById('mp-code-input').value = '';
+  openModal('modal-mp-join');
+});
+
+document.getElementById('btn-mp-join-submit').addEventListener('click', async () => {
+  const code = document.getElementById('mp-code-input').value.trim();
+  if (!/^\d{4}$/.test(code)) { alert('4자리 방 번호를 입력해주세요.'); return; }
+  if (!dbReady()) return;
+  try { await joinRoom(code); }
+  catch(e) { alert('방을 찾을 수 없거나 이미 대전이 시작된 방입니다.'); }
+});
+
+document.getElementById('btn-mp-cancel-wait').addEventListener('click', cancelRoom);
+
+// ═══════════════════════════════════════
+//  GAME FLOW
+// ═══════════════════════════════════════
+function initGame() {
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(EMPTY));
+  gameHistory=[]; gameOver=false; moveCount=0; playerMistakes=0;
+  gameStarted=true; startTime=Date.now();
+  currentTurn=BLACK;
+  updateUI(); drawBoard();
+  const s=playerColor===BLACK?'흑':'백';
+  document.getElementById('move-counter').textContent=`흑의 차례 — 첫 수를 놓으세요`;
+  if(!mpEnabled && playerColor===WHITE) setTimeout(()=>aiMove(),400);
+}
+
+function getRankInfo(elo) {
+  if(elo>=3400) return{kyu:'9',unit:'단',title:'오목 전설',desc:'인류 최고 경지'};
+  if(elo>=3100) return{kyu:'8',unit:'단',title:'그랜드마스터',desc:'세계 정상급 실력'};
+  if(elo>=2850) return{kyu:'7',unit:'단',title:'오목 마스터',desc:'국제 대회 우승권'};
+  if(elo>=2620) return{kyu:'6',unit:'단',title:'오목 명인',desc:'최고 AI를 압도합니다'};
+  if(elo>=2400) return{kyu:'5',unit:'단',title:'고단자',desc:'최고 AI를 꾸준히 이깁니다'};
+  if(elo>=2200) return{kyu:'4',unit:'단',title:'강단자',desc:'최고 AI와 互角입니다'};
+  if(elo>=2000) return{kyu:'3',unit:'단',title:'유단자',desc:'최고 AI에 도전할 수 있습니다'};
+  if(elo>=1850) return{kyu:'2',unit:'단',title:'유단자',desc:'어려움 AI를 압도합니다'};
+  if(elo>=1700) return{kyu:'1',unit:'단',title:'초단',desc:'어려움 AI를 꾸준히 이깁니다'};
+  if(elo>=1560) return{kyu:'1',unit:'급',title:'준유단',desc:'단 승급이 눈앞입니다'};
+  if(elo>=1430) return{kyu:'2',unit:'급',title:'강급자',desc:'어려움 AI와 互角입니다'};
+  if(elo>=1310) return{kyu:'3',unit:'급',title:'중상급자',desc:'어려움 AI에 도전 가능'};
+  if(elo>=1200) return{kyu:'4',unit:'급',title:'중급자',desc:'보통 AI를 압도합니다'};
+  if(elo>=1100) return{kyu:'5',unit:'급',title:'중급자',desc:'보통 AI를 꾸준히 이깁니다'};
+  if(elo>=1010) return{kyu:'6',unit:'급',title:'초중급',desc:'보통 AI와 互角입니다'};
+  if(elo>=930)  return{kyu:'7',unit:'급',title:'초급자',desc:'승리 패턴을 익혀가세요'};
+  if(elo>=860)  return{kyu:'8',unit:'급',title:'초급자',desc:'방어와 공격을 연습하세요'};
+  if(elo>=800)  return{kyu:'9',unit:'급',title:'초심자',desc:'3목 4목을 의식하세요'};
+  if(elo>=748)  return{kyu:'10',unit:'급',title:'초심자',desc:'연속 돌 만들기 연습'};
+  if(elo>=702)  return{kyu:'11',unit:'급',title:'입문자',desc:'기본 연결을 익혀보세요'};
+  if(elo>=660)  return{kyu:'12',unit:'급',title:'입문자',desc:'돌의 방향을 생각해보세요'};
+  if(elo>=622)  return{kyu:'13',unit:'급',title:'입문자',desc:'상대 돌도 잘 살피세요'};
+  if(elo>=600)  return{kyu:'14',unit:'급',title:'입문자',desc:'첫 승리를 목표로!'};
+  return        {kyu:'15',unit:'급',title:'입문자',desc:'첫 게임을 시작해보세요!'};
+}
+
+function calcElo(win,myElo,oppElo) {
+  const K=32, ex=1/(1+Math.pow(10,(oppElo-myElo)/400));
+  return Math.round(K*((win?1:0)-ex));
+}
+
+function getQuality() {
+  const r=playerMistakes/Math.max(1,Math.floor(moveCount/2));
+  if(r===0)    return'S';
+  if(r<0.1)    return'A';
+  if(r<0.25)   return'B';
+  if(r<0.5)    return'C';
+  return'D';
+}
+
+function endGame(playerWon) {
+  gameOver=true;
+  document.getElementById('rank-change-box').style.display='';
+  const elapsed=Math.round((Date.now()-startTime)/1000);
+  const delta=calcElo(playerWon,stats.elo,DIFF_ELO[difficulty]);
+  const prev=stats.elo;
+  if(playerWon){stats.wins++;stats.diffStats[difficulty].w++;}
+  else{stats.losses++;stats.diffStats[difficulty].l++;}
+  stats.elo=Math.max(600,stats.elo+delta);
+  saveStats(); updateRankUI(); updateRecordUI();
+
+  document.getElementById('result-icon').textContent=playerWon?'🎉':'😞';
+  document.getElementById('result-title').textContent=playerWon?'승리!':'패배...';
+  document.getElementById('result-sub').textContent=playerWon?`최고 AI를 이겼습니다! 🏆`:`최고 AI에게 졌습니다.`;
+  document.getElementById('r-moves').textContent=moveCount;
+  document.getElementById('r-time').textContent=elapsed;
+  document.getElementById('r-quality').textContent=getQuality();
+  const de=document.getElementById('rank-change-delta');
+  de.textContent=(delta>=0?'+':'')+delta;
+  de.className='rank-change-delta '+(delta>=0?'delta-up':'delta-down');
+  document.getElementById('rank-change-text').textContent=`ELO ${prev} → ${stats.elo}`;
+
+  const fbs=[];
+  if(playerWon&&delta>20) fbs.push({t:'good',m:'🏆 ELO가 크게 올랐어요!'});
+  if(playerMistakes>=3)   fbs.push({t:'warn',m:`⚠️ 금수를 ${playerMistakes}번 시도했어요. 금수 위치를 미리 확인하세요.`});
+  if(playerMistakes===0&&playerWon) fbs.push({t:'good',m:'✨ 금수 없이 완벽한 플레이!'});
+  if(!playerWon) fbs.push({t:'',m:'💡 패턴을 분석하고 다시 도전해보세요!'});
+  if(!fbs.length) fbs.push({t:'',m:'📝 꾸준히 플레이할수록 기력이 오릅니다!'});
+  document.getElementById('feedback-list').innerHTML=fbs.map(f=>`<div class="feedback-item ${f.t}">${f.m}</div>`).join('');
+
+  document.getElementById('move-counter').textContent=playerWon?'🎉 승리!':'😞 패배...';
+  if(playerWon) playWinSound(); else playLoseSound();
+  setTimeout(()=>openModal('modal-result'),500);
+}
+
+// ═══════════════════════════════════════
+//  UI
+// ═══════════════════════════════════════
+function updateUI() {
+  const isBlack=currentTurn===BLACK;
+  document.getElementById('card-black').className='player-card'+(isBlack?' active black-active':'');
+  document.getElementById('card-white').className='player-card'+(!isBlack?' active':'');
+  document.getElementById('dot-black').style.display=isBlack?'block':'none';
+  document.getElementById('dot-white').style.display=!isBlack?'block':'none';
+}
+
+function updateRankUI() {
+  const ri=getRankInfo(stats.elo);
+  document.getElementById('rank-kyu').textContent=ri.kyu;
+  document.getElementById('rank-unit').textContent=ri.unit;
+  document.getElementById('rank-title').textContent=ri.title;
+  document.getElementById('rank-desc').textContent=ri.desc;
+  const pct=Math.min(100,Math.max(0,(stats.elo-600)/(3400-600)*100));
+  document.getElementById('elo-fill').style.width=pct+'%';
+  document.getElementById('elo-txt').textContent='ELO: '+stats.elo;
+  document.getElementById('rank-chip-val').textContent=ri.kyu+ri.unit;
+}
+
+function updateRecordUI() {
+  document.getElementById('record-display').textContent=`${stats.wins}승 ${stats.losses}패`;
+}
+
+function saveStats() { localStorage.setItem('omok_stats2',JSON.stringify(stats)); }
+
+// ═══════════════════════════════════════
+//  MODAL — History API 완전 미사용
+// ═══════════════════════════════════════
+// pushState/back을 전혀 쓰지 않는다.
+// 뒤로가기(popstate)가 발생하면:
+//   - 열린 모달이 있으면 모두 닫고 앱에 머문다(re-push로 제자리 복귀)
+//   - 열린 모달이 없으면 그냥 통과 → 브라우저가 실제로 뒤로 간다
+
+let _sentinelPushed = false;
+
+function _ensureSentinel() {
+  if(!_sentinelPushed) {
+    history.pushState({omokModal:true}, '', location.pathname);
+    _sentinelPushed = true;
+  }
+}
+
+function openModal(id) {
+  if(document.getElementById(id).classList.contains('open')) return;
+  document.getElementById(id).classList.add('open');
+  modalStack.push(id);
+  _ensureSentinel();
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  const idx = modalStack.lastIndexOf(id);
+  if(idx !== -1) modalStack.splice(idx, 1);
+  // sentinel은 건드리지 않음 — popstate가 처리
+}
+
+window.addEventListener('popstate', function(e) {
+  if(modalStack.length > 0) {
+    // 가장 위의 모달 1개만 닫기
+    var id = modalStack[modalStack.length - 1];
+    document.getElementById(id).classList.remove('open');
+    modalStack.pop();
+    // 아직 열린 모달이 남아있으면 sentinel 유지, 없으면 소비
+    if(modalStack.length > 0) {
+      history.pushState({omokModal:true}, '', location.pathname);
+    } else {
+      _sentinelPushed = false;
+    }
+  } else {
+    _sentinelPushed = false;
+  }
+});
+
+document.querySelectorAll('.modal-overlay').forEach(function(o) {
+  o.addEventListener('click', function(e) {
+    if(e.target === o) closeModal(o.id);
+  });
+});
+
+// ═══════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════
+function chooseColor(c) {
+  selectedColor=c;
+  document.getElementById('choose-black').className='color-btn'+(c==='black'?' selected':'');
+  document.getElementById('choose-white').className='color-btn'+(c==='white'?' selected':'');
+}
+
+function startGame() {
+  closeModal('modal-new');
+  playerColor=selectedColor==='black'?BLACK:WHITE;
+  aiColor=playerColor===BLACK?WHITE:BLACK;
+  document.getElementById('black-label').textContent=playerColor===BLACK?'나':'AI';
+  document.getElementById('white-label').textContent=playerColor===WHITE?'나':'AI';
+  initGame();
+}
+
+function rematch() {
+  closeModal('modal-result');
+  if(mpEnabled) { leaveRoom(); return; }
+  initGame();
+}
+
+document.getElementById('btn-new').addEventListener('click',()=>{
+  if(mpEnabled) { if(confirm('대전을 종료하고 나가시겠습니까?')) leaveRoom(); return; }
+  openModal('modal-new');
+});
+
+document.getElementById('btn-stats').addEventListener('click',()=>{
+  document.getElementById('s-total').textContent=stats.wins+stats.losses;
+  document.getElementById('s-wins').textContent=stats.wins;
+  const wr=stats.wins+stats.losses>0?Math.round(stats.wins/(stats.wins+stats.losses)*100):0;
+  document.getElementById('s-wr').textContent=wr+'%';
+  document.getElementById('s-elo').textContent=stats.elo;
+  openModal('modal-stats');
+});
+
+document.getElementById('btn-info').addEventListener('click',()=>openModal('modal-info'));
+
+document.getElementById('btn-reset-stats').addEventListener('click',()=>{
+  openModal('modal-confirm');
+});
+
+document.getElementById('btn-confirm-reset').addEventListener('click',()=>{
+  stats = { elo:800, wins:0, losses:0, diffStats:{1:{w:0,l:0},2:{w:0,l:0},3:{w:0,l:0}} };
+  saveStats();
+  document.getElementById('s-total').textContent='0';
+  document.getElementById('s-wins').textContent='0';
+  document.getElementById('s-wr').textContent='0%';
+  document.getElementById('s-elo').textContent='800';
+  updateRankUI();
+  updateRecordUI();
+  closeModal('modal-confirm');
+});
+
+document.getElementById('btn-undo').addEventListener('click',()=>{
+  if(mpEnabled) return;
+  if(!gameStarted||gameOver||thinking) return;
+  if(gameHistory.length<2) return;
+  undoMove(); undoMove();
+  moveCount=Math.max(0,moveCount-2);
+  currentTurn=playerColor;
+  updateUI(); drawBoard();
+  const s=currentTurn===BLACK?'흑':'백';
+  document.getElementById('move-counter').textContent=`${s}의 차례 — 무르기 완료`;
+});
+
+// 난이도는 항상 최고(3)으로 고정 — 탭 이벤트 불필요
+
+// ═══════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════
+function resizeHandler() {
+  setupBoard();
+}
+window.addEventListener('resize', resizeHandler);
+
+// 보드 크기를 화면에 맞게 계산
+function calcBoardSize() {
+  const app = document.getElementById('app');
+  const appH = app.clientHeight;
+  const header = document.querySelector('header').offsetHeight;
+  const statusBar = document.querySelector('.status-bar').offsetHeight;
+  const moveCounter = document.querySelector('.move-counter').offsetHeight;
+  const infoRow = document.querySelector('.info-row').offsetHeight;
+  const controls = document.querySelector('.controls').offsetHeight;
+  const padding = 24; // board-wrapper padding
+  const available = appH - header - statusBar - moveCounter - infoRow - controls - padding;
+  const appW = app.clientWidth - 20; // 10px padding each side
+  const size = Math.min(available, appW);
+  document.querySelector('.board-wrapper').style.height = size + 'px';
+  document.getElementById('board-container').style.width = size + 'px';
+  document.getElementById('board-container').style.height = size + 'px';
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  calcBoardSize();
+  setupBoard();
+  updateRankUI();
+  updateRecordUI();
+  // 난이도 항상 최고 고정
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(EMPTY));
+  drawBoard();
+});
+
+window.addEventListener('resize',()=>{
+  calcBoardSize();
+  setupBoard();
+});
+</script>
+</body>
+</html>
