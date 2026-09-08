@@ -118,11 +118,6 @@
     position: absolute; inset: 0;
     background: var(--board-bg);
   }
-  #board-bg::after {
-    content: ''; position: absolute; inset: 0;
-    background: repeating-linear-gradient(168deg, transparent 0px, transparent 16px, rgba(80,40,5,0.06) 16px, rgba(80,40,5,0.06) 17px);
-    pointer-events: none;
-  }
   #board-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
   /* ── THINKING BAR ── */
@@ -134,12 +129,12 @@
   /* ── INFO ROW ── */
   .info-row {
     flex-shrink: 0;
-    display: flex; gap: 6px;
-    padding: 5px 14px 4px;
+    display: flex; gap: 4px;
+    padding: 5px 8px 4px;
   }
-  .info-chip { flex: 1; background: var(--panel); border-radius: 9px; padding: 5px 9px; }
+  .info-chip { flex: 1; background: var(--panel); border-radius: 9px; padding: 5px 4px; text-align: center; }
   .info-chip-label { font-size: 9px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.7px; }
-  .info-chip-value { font-size: 13px; font-weight: 700; color: var(--gold); }
+  .info-chip-value { font-size: 13px; font-weight: 700; color: var(--gold); white-space: nowrap; }
 
   /* ── CONTROLS ── */
   .controls {
@@ -697,10 +692,17 @@ let cellSize, padX, boardW;
 
 function setupBoard() {
   const cw = container.clientWidth;
-  canvas.width = cw; canvas.height = cw;
+  // devicePixelRatio 대응: 물리 픽셀 기준으로 캔버스 생성
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(cw * dpr);
+  canvas.height = Math.round(cw * dpr);
+  canvas.style.width = cw + 'px';
+  canvas.style.height = cw + 'px';
+  ctx.scale(dpr, dpr);
   boardW = cw;
-  cellSize = cw / SIZE;
-  padX = cellSize / 2;
+  // 패딩 = 1 cell, 총 SIZE-1 간격이 (cw - 2*pad) 에 맞게
+  cellSize = cw / (SIZE + 1);
+  padX = cellSize;
   container.style.setProperty('--cell', cellSize + 'px');
   container.style.setProperty('--pad', padX + 'px');
   drawBoard();
@@ -712,24 +714,35 @@ function gy(r) { return padX + r * cellSize; }
 function drawBoard() {
   if (!canvas.width) return;
   ctx.clearRect(0, 0, boardW, boardW);
-  // Grid lines — drawn directly on canvas so they always render crisply
-  // (a CSS background-gradient approach was unreliable on some mobile browsers)
+
+  // ── 격자선을 Canvas에서 직접 그림 (CSS gradient 대각선 아티팩트 방지) ──
   ctx.save();
   ctx.strokeStyle = '#8b5e1a';
   ctx.lineWidth = 1;
-  const gStart = gx(0), gEnd = gx(SIZE - 1);
+  // 픽셀 선명도: 0.5 offset
   for (let i = 0; i < SIZE; i++) {
     const x = Math.round(gx(i)) + 0.5;
-    ctx.beginPath(); ctx.moveTo(x, gStart); ctx.lineTo(x, gEnd); ctx.stroke();
     const y = Math.round(gy(i)) + 0.5;
-    ctx.beginPath(); ctx.moveTo(gStart, y); ctx.lineTo(gEnd, y); ctx.stroke();
+    // 세로선
+    ctx.beginPath();
+    ctx.moveTo(x, Math.round(gy(0)) + 0.5);
+    ctx.lineTo(x, Math.round(gy(SIZE - 1)) + 0.5);
+    ctx.stroke();
+    // 가로선
+    ctx.beginPath();
+    ctx.moveTo(Math.round(gx(0)) + 0.5, y);
+    ctx.lineTo(Math.round(gx(SIZE - 1)) + 0.5, y);
+    ctx.stroke();
   }
-  ctx.restore();
-  // Star points
+  // 목(★ 화점)
   [[3,3],[3,11],[7,7],[11,3],[11,11]].forEach(([r,c]) => {
     ctx.fillStyle = '#7a4a10';
-    ctx.beginPath(); ctx.arc(gx(c), gy(r), cellSize*0.09, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(Math.round(gx(c)), Math.round(gy(r)), Math.round(cellSize * 0.09), 0, Math.PI * 2);
+    ctx.fill();
   });
+  ctx.restore();
+
   // Stones
   for (let r = 0; r < SIZE; r++)
     for (let c = 0; c < SIZE; c++)
@@ -737,8 +750,8 @@ function drawBoard() {
   // Last move marker — 또렷하게
   if (gameHistory.length) {
     const last = gameHistory[gameHistory.length-1];
-    const mx = Math.round(gx(last.c)) + 0.5;
-    const my = Math.round(gy(last.r)) + 0.5;
+    const mx = Math.round(gx(last.c));
+    const my = Math.round(gy(last.r));
     const mr = Math.round(cellSize * 0.2);
     ctx.save();
     ctx.shadowColor = 'transparent';
@@ -1030,8 +1043,9 @@ async function aiMove() {
 // ═══════════════════════════════════════
 function getCell(cx,cy) {
   const rect=canvas.getBoundingClientRect();
-  const x=(cx-rect.left)*(canvas.width/rect.width);
-  const y=(cy-rect.top)*(canvas.height/rect.height);
+  // CSS px 기준으로 계산 (padX, cellSize 모두 CSS px 단위)
+  const x=(cx-rect.left);
+  const y=(cy-rect.top);
   return [Math.round((y-padX)/cellSize), Math.round((x-padX)/cellSize)];
 }
 
@@ -1083,22 +1097,18 @@ canvas.addEventListener('click', async(e)=>{
 });
 
 function rippleEffect(r,c) {
-  const rect=canvas.getBoundingClientRect();
-  const sc=rect.width/canvas.width;
   const el=document.createElement('div');
   el.className='ripple';
-  const sz=cellSize*sc*.7;
-  el.style.cssText=`width:${sz}px;height:${sz}px;left:${gx(c)*sc-sz/2}px;top:${gy(r)*sc-sz/2}px`;
+  const sz=cellSize*.7;
+  el.style.cssText=`width:${sz}px;height:${sz}px;left:${gx(c)-sz/2}px;top:${gy(r)-sz/2}px`;
   container.appendChild(el);
   setTimeout(()=>el.remove(),650);
 }
 function forbiddenEffect(r,c) {
-  const rect=canvas.getBoundingClientRect();
-  const sc=rect.width/canvas.width;
   const el=document.createElement('div');
   el.className='forbidden-flash';
-  const sz=cellSize*sc*.7;
-  el.style.cssText=`width:${sz}px;height:${sz}px;left:${gx(c)*sc-sz/2}px;top:${gy(r)*sc-sz/2}px`;
+  const sz=cellSize*.7;
+  el.style.cssText=`width:${sz}px;height:${sz}px;left:${gx(c)-sz/2}px;top:${gy(r)-sz/2}px`;
   container.appendChild(el);
   setTimeout(()=>el.remove(),500);
 }
@@ -1457,12 +1467,15 @@ function chooseColor(c) {
 }
 
 function startGame() {
+  const bc = document.getElementById('board-container');
+  bc.style.visibility = 'hidden';
   closeModal('modal-new');
   playerColor=selectedColor==='black'?BLACK:WHITE;
   aiColor=playerColor===BLACK?WHITE:BLACK;
   document.getElementById('black-label').textContent=playerColor===BLACK?'나':'AI';
   document.getElementById('white-label').textContent=playerColor===WHITE?'나':'AI';
   initGame();
+  setTimeout(()=>{ bc.style.visibility = ''; }, 250);
 }
 
 function rematch() {
