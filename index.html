@@ -251,6 +251,7 @@
   @keyframes forbidden-anim { 50%{transform:scale(1.5);opacity:1} 100%{transform:scale(2.5);opacity:0} }
 
   /* ── MULTIPLAYER ── */
+  .mp-rematch-waiting { font-size:13px; color:var(--text-dim); text-align:center; margin-top:8px; padding:10px; background:var(--panel); border-radius:10px; }
   @keyframes mp-spin { to { transform: rotate(360deg); } }
   .mp-spinner { width: 26px; height: 26px; border: 3px solid var(--text-muted); border-top-color: var(--gold); border-radius: 50%; animation: mp-spin 0.8s linear infinite; margin: 14px auto 0; }
   .mp-code-input { width: 100%; padding: 14px; font-size: 26px; letter-spacing: 10px; text-align: center; border-radius: 12px; border: 1.5px solid var(--text-muted); background: var(--panel); color: var(--text); font-family: inherit; margin-bottom: 16px; }
@@ -378,9 +379,10 @@
       <div class="feedback-list" id="feedback-list"></div>
     </div>
     <div class="result-btns">
-      <button class="result-btn result-btn-main" onclick="rematch()">다시 하기</button>
-      <button class="result-btn result-btn-sub" onclick="closeModal('modal-result')">닫기</button>
+      <button class="result-btn result-btn-main" id="btn-rematch" onclick="rematch()">다시 하기</button>
+      <button class="result-btn result-btn-sub" id="btn-result-close" onclick="resultClose()">닫기</button>
     </div>
+    <div id="mp-rematch-status" class="mp-rematch-waiting" style="display:none"></div>
   </div>
 </div>
 
@@ -681,6 +683,7 @@ let mpRoomCode = null;
 let mpRoomRef = null;
 let mpMovesRef = null;
 let mpIsHost = false;
+let mpRematchListener = null;  // 재경기 리스너
 
 // ═══════════════════════════════════════
 //  BOARD CANVAS
@@ -1236,10 +1239,46 @@ function mpEndGame(playerWon) {
     `<div class="feedback-item ${playerWon?'good':''}">${playerWon?'🎉 실시간 대전에서 승리했습니다!':'😞 다음 대전에서는 이길 수 있어요!'}</div>`;
 
   if (playerWon) playWinSound(); else playLoseSound();
+
+  // 대전 종료 후: 상대방이 먼저 다시하기 요청을 보낼 경우 감지
+  if (mpRoomRef) {
+    // 혹시 남아있는 rematch 데이터 초기화
+    mpRoomRef.child('rematch').remove().catch(() => {});
+    if (mpRematchListener) {
+      mpRoomRef.child('rematch').off('value', mpRematchListener);
+      mpRematchListener = null;
+    }
+    mpRematchListener = mpRoomRef.child('rematch').on('value', snap => {
+      const data = snap.val();
+      if (!data) return;
+      const keys = Object.keys(data);
+      // 상대방 요청 먼저 도착 시 결과 모달에 표시
+      if (keys.length === 1 && !keys.includes(mpMyId)) {
+        const statusEl = document.getElementById('mp-rematch-status');
+        if (statusEl) {
+          statusEl.style.display = 'block';
+          statusEl.textContent = '🔔 상대방이 다시하기를 요청했습니다!';
+        }
+      }
+      // 양쪽 모두 동의
+      if (keys.length >= 2) {
+        if (mpRematchListener) {
+          mpRoomRef.child('rematch').off('value', mpRematchListener);
+          mpRematchListener = null;
+        }
+        startMPRematch();
+      }
+    });
+  }
+
   setTimeout(()=>openModal('modal-result'),500);
 }
 
 function leaveRoom() {
+  if (mpRematchListener) {
+    if (mpRoomRef) mpRoomRef.child('rematch').off('value', mpRematchListener);
+    mpRematchListener = null;
+  }
   if (mpMovesRef) { mpMovesRef.off(); mpMovesRef = null; }
   if (mpRoomRef) {
     mpRoomRef.off();
@@ -1247,6 +1286,11 @@ function leaveRoom() {
     mpRoomRef = null;
   }
   mpRoomCode = null; mpIsHost = false;
+  // 결과 모달 다시하기 버튼 초기화
+  const btn = document.getElementById('btn-rematch');
+  const statusEl = document.getElementById('mp-rematch-status');
+  if (btn) { btn.disabled = false; btn.textContent = '다시 하기'; }
+  if (statusEl) statusEl.style.display = 'none';
   setMPMode(false);
   gameStarted = false; gameOver = true;
   board = Array.from({length:SIZE},()=>Array(SIZE).fill(EMPTY));
@@ -1478,10 +1522,82 @@ function startGame() {
   setTimeout(()=>{ bc.style.visibility = ''; }, 250);
 }
 
+function resultClose() {
+  if (mpEnabled) { leaveRoom(); } else { closeModal('modal-result'); }
+}
+
 function rematch() {
+  if (!mpEnabled) {
+    closeModal('modal-result');
+    initGame();
+    return;
+  }
+  // 대전 모드: 재경기 요청
+  if (!mpRoomRef) return;
+
+  const btn = document.getElementById('btn-rematch');
+  const statusEl = document.getElementById('mp-rematch-status');
+  btn.disabled = true;
+  btn.textContent = '요청 전송 중...';
+
+  // 내 재경기 요청을 Firebase에 기록
+  mpRoomRef.child('rematch/' + mpMyId).set(true).then(() => {
+    btn.textContent = '⏳ 상대 수락 대기 중...';
+    statusEl.style.display = 'block';
+    statusEl.textContent = '상대방이 다시하기를 누르면 새 게임이 시작됩니다.';
+
+    // 상대방의 재경기 요청도 있는지 확인하는 리스너
+    if (mpRematchListener) mpRoomRef.child('rematch').off('value', mpRematchListener);
+    mpRematchListener = mpRoomRef.child('rematch').on('value', snap => {
+      const data = snap.val();
+      if (!data) return;
+      const keys = Object.keys(data);
+      // 두 명 모두 동의했으면 재경기 시작
+      if (keys.length >= 2) {
+        if (mpRematchListener) {
+          mpRoomRef.child('rematch').off('value', mpRematchListener);
+          mpRematchListener = null;
+        }
+        startMPRematch();
+      }
+    });
+  }).catch(() => {
+    btn.disabled = false;
+    btn.textContent = '다시 하기';
+    statusEl.style.display = 'none';
+    alert('재경기 요청에 실패했습니다. 다시 시도해주세요.');
+  });
+}
+
+function startMPRematch() {
+  // rematch 노드 초기화 + 새 게임
+  if (mpRoomRef) {
+    mpRoomRef.child('rematch').remove().catch(() => {});
+    mpRoomRef.child('moves').remove().catch(() => {});
+    mpRoomRef.child('status').set('playing').catch(() => {});
+  }
+  // 결과 모달 닫고 UI 초기화
+  const btn = document.getElementById('btn-rematch');
+  const statusEl = document.getElementById('mp-rematch-status');
+  btn.disabled = false;
+  btn.textContent = '다시 하기';
+  statusEl.style.display = 'none';
   closeModal('modal-result');
-  if(mpEnabled) { leaveRoom(); return; }
+
+  // moves 리스너 재연결
+  if (mpMovesRef) { mpMovesRef.off(); }
+  mpMovesRef = mpRoomRef.child('moves');
+  mpMovesRef.on('child_added', snap => {
+    const mv = snap.val();
+    if (!mv || mv.by === mpMyId) return;
+    applyRemoteMove(mv.r, mv.c, mv.color === 'black' ? BLACK : WHITE);
+  });
+
   initGame();
+  const myTurnFirst = playerColor === BLACK;
+  document.getElementById('move-counter').textContent = myTurnFirst
+    ? '내 차례(흑) — 첫 수를 놓으세요'
+    : '상대(흑)의 차례를 기다리는 중...';
 }
 
 document.getElementById('btn-new').addEventListener('click',()=>{
